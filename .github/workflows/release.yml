@@ -1,0 +1,135 @@
+name: Build and release PS5Plus
+
+# Every push to main publishes a Linux release. Fenrir's package manager stages the latest one
+# (jefflouisma/PS5Plus releases/latest, asset <tag>-Linux-x86_64.tar.gz with its GitHub digest).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: write
+
+env:
+  SCCACHE_GHA_ENABLED: "true"
+  UPSTREAM_WORKFLOW: KytyPS5/.github/workflows/build.yml
+
+jobs:
+  linux:
+    name: Build PS5Plus (Linux)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Read upstream CI contract
+        id: upstream
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes python3-yaml
+          {
+            echo "tag=PS5Plus-$(date -u +'%Y-%m-%d')-${GITHUB_SHA::7}"
+            echo "kyty=$(git -C KytyPS5 rev-parse HEAD)"
+            for field in apt qt targets tests; do
+              echo "$field=$(python3 scripts/upstream-ci.py "$UPSTREAM_WORKFLOW" linux "$field")"
+            done
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install build dependencies
+        shell: bash
+        run: sudo apt-get install --no-install-recommends --yes ${{ steps.upstream.outputs.apt }}
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ steps.upstream.outputs.qt }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          cache: true
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S KytyPS5 -B _Build/linux \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
+            -DKYTY_BUILD_ORIGIN=Fork \
+            -DKYTY_BUILD_REPOSITORY="$GITHUB_REPOSITORY" \
+            -DKYTY_RELEASE_TAG="${{ steps.upstream.outputs.tag }}" \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_PREFIX_PATH="$Qt6_DIR"
+
+      - name: Build
+        shell: bash
+        run: cmake --build _Build/linux --target ${{ steps.upstream.outputs.targets }} --parallel
+
+      - name: Test
+        shell: bash
+        run: ctest --test-dir _Build/linux --output-on-failure -R '${{ steps.upstream.outputs.tests }}'
+
+      - name: Install
+        shell: bash
+        run: cmake --install _Build/linux --prefix _Build/linux/install
+
+      - name: Verify Fenrir launch contract
+        shell: bash
+        run: |
+          install_dir=_Build/linux/install
+          file "$install_dir/kyty_emulator" | grep -q "ELF 64-bit LSB .*x86-64"
+          help="$("$install_dir/kyty_emulator" --help)"
+          for flag in --game --fullscreen --screen-width --screen-height --hide-cursor \
+              --shader-log-folder --command-buffer-dump-folder --printf-output-file; do
+            grep -q -- "$flag" <<< "$help" || { echo "kyty_emulator --help is missing $flag"; exit 1; }
+          done
+
+      - name: Package
+        shell: bash
+        run: |
+          install_dir=_Build/linux/install
+          chmod a+x "$install_dir/kyty_launcher" "$install_dir/kyty_emulator" "$install_dir/kyty_updater"
+          tar -C "$install_dir" -czf "${{ steps.upstream.outputs.tag }}-Linux-x86_64.tar.gz" .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PS5Plus-Linux-x86_64
+          path: ${{ steps.upstream.outputs.tag }}-Linux-x86_64.tar.gz
+          if-no-files-found: error
+
+      - name: Release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.upstream.outputs.tag }}
+          KYTY: ${{ steps.upstream.outputs.kyty }}
+        run: |
+          # Fenrir pins each version's digest, so an existing release is never replaced.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "$TAG already exists; keeping its published package."
+            exit 0
+          fi
+          notes="Linux build of [jefflouisma/KytyPS5@${KYTY::7}](https://github.com/jefflouisma/KytyPS5/commit/$KYTY) (branch \`ps5plus\`)."
+          gh release create "$TAG" "$TAG-Linux-x86_64.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --notes "$notes"

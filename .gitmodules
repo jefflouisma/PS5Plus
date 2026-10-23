@@ -1,0 +1,4 @@
+[submodule "KytyPS5"]
+	path = KytyPS5
+	url = https://github.com/jefflouisma/KytyPS5.git
+	branch = ps5plus
