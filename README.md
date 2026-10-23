@@ -78,7 +78,7 @@ saves. Emulator logs are written to `/Volumes/4TB_Drive/tmp/ps5plus/logs` in the
 Upstream KytyPS5 shows a black screen in Ragnarök (KytyPS5 issue #546). `ps5plus` adds the open
 upstream pull requests the game needs and the fixes below. With them it boots, plays the opening
 cutscene, and is controllable through the sled ride, the quick-time events and the first fight on
-g913 (RTX 5080, NVIDIA 615.71).
+g913 (RTX 5080, NVIDIA 615.71), launched from EmuDeck.
 
 Merged upstream pull requests: #1118, #1152, #1165, #1199, #1200, #1211, #1254, #1255, #1281,
 #1282, #1284, #1285, #1289, #1294, #1295, #1307, #1308, #1311, #1456, #1491, #1503, #1506,
@@ -97,6 +97,8 @@ PS5Plus changes:
 | `8166ea03` | Shader: resource tracking follows loop inductions split across congruent Phis. |
 | `807e6e76` | Renderer: index buffers are bound with `INDEX_BUFFER_SIZE` (`VK_KHR_maintenance5`), so indices past it read as 0 as on the hardware. |
 | `1ed88c44` | Shader: a BDA page miss tests its fault bit before setting it, so a missing page no longer serializes a whole draw. |
+| `fcbad5a2` | Texture cache: the garbage collector frees GPU-written images superseded by a newer same-layout sibling, so dynamic-resolution targets no longer fill device memory. |
+| `b8d12f57` | Buffer cache: buffers created for BDA page faults stay resident, so their pages no longer fault again and read zero every few seconds. |
 
 The last two fix the NVIDIA device loss (`Xid 109, CTX SWITCH TIMEOUT` in `kern.log`) in the
 opening cutscene. Its particle draws read past their index buffers, and lit particles spent
@@ -111,8 +113,9 @@ Known issues:
   and a quick-time event can fail during one. Later runs reuse the pipeline caches.
 - Some particle effects in the opening (snow and sparks) draw as screen-wide streaks.
 - The frame rate is 10–40 FPS.
-- After a death, **Restart from Checkpoint** may need a second Cross press once its loading
-  finishes.
+- After a death, **Restart from Checkpoint** sometimes never finishes: the tip screen stays up
+  while the game renders normally. The cause is still open; some deaths reload after a second
+  Cross press, others not at all.
 
 The merged pull requests change areas upstream is still revising. When upstream merges them, or
 other changes that touch them, the nightly merge may conflict and stop with a notification.
