@@ -78,15 +78,20 @@ saves. Emulator logs are written to `/Volumes/4TB_Drive/tmp/ps5plus/logs` in the
 Upstream KytyPS5 shows a black screen in Ragnarök (KytyPS5 issue #546). `ps5plus` adds the open
 upstream pull requests the game needs and the fixes below. With them it runs from EmuDeck on g913
 (RTX 5080, NVIDIA 615.71) through the opening: the sled ride and its quick-time events, Freya's
-attack, the credits ride, and the on-foot homestead section with Fenrir's shelter, the cabin and
-the forest.
+attack, the credits ride, the on-foot homestead section with Fenrir's shelter, the cabin and the
+forest dream, then Atreus's tracks through the wolves' den cave to the first fight with Raiders.
+In that fight light and heavy attacks, blocking, rolling, and the axe throw and recall all work, and
+both sides take damage.
 
 Merged upstream pull requests: #1118, #1152, #1165, #1199, #1200, #1211, #1254, #1255, #1281,
 #1282, #1284, #1285, #1289, #1294, #1295, #1307, #1308, #1311, #1456, #1491, #1503, #1506,
-#1791, #1821 and #1828. The others linked from the issue were already upstream, superseded
-(#1482 by #1791) or unrelated. #1288 (draw GPU-written indirect arguments without a readback)
-was closed upstream after upstream implemented it in `c513a4a1`, `949de19b` and `86fed10b`,
-which `ps5plus` has.
+#1791, #1821, #1828, #1866 and #1872. #1866 and #1872 are still open upstream; each is one commit,
+applied as `bd2fa259` and `4eff78c9`. #1115, #1144, #1188, #1256, #1283, #1286, #1288, #1296 and
+#1482 were closed upstream after main implemented them. Their merges record them and keep main's
+code. For example, main implemented #1288 (draw GPU-written indirect arguments without a
+readback) in `c513a4a1`, `949de19b` and `86fed10b`. Its one remaining difference, offsets with no
+SGPR destination, never occurs in Ragnarök's forest. `e8ac3324` cherry-picks main's `706aa030`,
+which extracts 9-bit NGG primitive vertex indices.
 
 PS5Plus changes:
 
@@ -96,7 +101,7 @@ PS5Plus changes:
 | `4b3672ab`, `349f7d19` | Texture cache: keep up to four dynamic-resolution siblings of a render target instead of recreating them every frame. |
 | `651db272` | Shader: allow PC-relative buffer descriptors in programs that use `s_swappc`. |
 | `8166ea03` | Shader: resource tracking follows loop inductions split across congruent Phis. |
-| `807e6e76` | Renderer: index buffers are bound with `INDEX_BUFFER_SIZE` (`VK_KHR_maintenance5`), so indices past it read as 0 as on the hardware. |
+| `807e6e76` | Renderer: index buffers are bound with `INDEX_BUFFER_SIZE` (`VK_KHR_maintenance5`), so indices past it read as 0 as on the hardware. Reverted by `047bb25b` for #1866, which does the same for indirect draws too. |
 | `1ed88c44` | Shader: a BDA page miss tests its fault bit before setting it, so a missing page no longer serializes a whole draw. |
 | `fcbad5a2` | Texture cache: the garbage collector frees GPU-written images superseded by a newer same-layout sibling, so dynamic-resolution targets no longer fill device memory. |
 | `b8d12f57` | Buffer cache: buffers created for BDA page faults stay resident, so their pages no longer fault again and read zero every few seconds. |
@@ -104,6 +109,8 @@ PS5Plus changes:
 | `9bec8390` | Texture cache: under critical memory pressure, textures the GPU never wrote are evicted after a few idle frames, so a scene change no longer fills device memory before anything is old enough to evict. |
 | `2b0ef0a7` | Texture cache: memory pressure is measured by memory in use, not by allocator blocks that still hold freed space, so collection no longer thrashes. |
 | `3a51507e` | Graphics: device memory is allocated in 64 MiB blocks, which keeps about 1 GB less of it reserved but unused. |
+| `43b7e105`, `ce27b876` | Renderer: a strided buffer is bound through the whole format of its last record, so the last vertex no longer reads zeros. |
+| `a561b646`, `91d977b6`, `0f98afae`, `e9b75de3` | Shader: checked physical loads are shared in one function, and address arithmetic and bitcasts are no longer repeated, so pipelines compile in about half the time. |
 
 `807e6e76` and `1ed88c44` fix the NVIDIA device loss (`Xid 109, CTX SWITCH TIMEOUT` in
 `kern.log`) in the opening cutscene. Its particle draws read past their index buffers, and lit
@@ -118,6 +125,21 @@ tile-shaped blocks and white blobs: under memory pressure the buffer cache evict
 shaders reach through BDA, and their pages read zero until faulted back in (10 faults/s before,
 under 0.5/s after).
 
+`43b7e105` and `ce27b876` remove the long pointed spikes that stuck out of rocks, branches and
+overhangs in the forest. Some meshes store positions 6 bytes apart and fetch them as 8-byte
+16_16_16_16 values. The buffer was bound for `NumRecords × Stride` bytes, so the last vertex's
+fetch ran 2 bytes past the binding and read zeros. A zero 16-bit UNORM position becomes -1, and
+the vertex was drawn far away. The hardware bounds such fetches by record.
+
+The four shader changes shrink Ragnarök's pixel shaders by about a quarter, the largest from
+138k to 94k SPIR-V words. Before them, each guest DWORD read through a physical address carried
+its own missing-page branch, and NVIDIA took 4 to 5 s to compile each pipeline with such a shader. On a cold load of a forest
+save, with no pipeline or driver cache, slow compiles (300 ms or more) took 312 s instead of
+761 s: graphics 395 s to 80 s, compute 366 s to 233 s. The main menu now appears after 249 s
+instead of 405 s, and the game 210 s after Continue instead of 450 s. The frame rate at the same
+view is about 4% lower (17.4 instead of 18.2 FPS). Sharing min/max and half-float conversions in
+functions would have shrunk the shaders further, but it doubled NVIDIA's compile time.
+
 `705fadbb` reverts an earlier PS5Plus change, `4c14b72b`, that skipped the ordered-append rank
 wait on 32-lane hosts (NVIDIA). The particle compaction depends on that ordering. Without it,
 snow, sparks and embers drew as screen-wide streaks through the screen centre.
@@ -127,16 +149,18 @@ Fenrir starts Ragnarök with `--tessellation`, set in homelab's
 
 Known issues:
 
-- The first time a scene is played, pipelines compile on the render thread at up to about 5 s
-  each, and the game shows no frames meanwhile. In the opening credits sled ride and the forest
-  dream these freezes add up to several minutes of single frames. Compiled pipelines are kept in
-  `~/.local/share/ps5plus/_PipelineCache` (keyed by GPU and driver), so later runs skip them.
+- The first time a scene is played, pipelines compile on the render thread, mostly in under 2 s
+  each, and the game shows no frames meanwhile. Before the shader changes above, new areas such as
+  the cave on Atreus's tracks froze for 45 to 100 s at a time. The changes roughly halve that.
+  Compiled pipelines are kept in `~/.local/share/ps5plus/_PipelineCache` (keyed by GPU and
+  driver), so later runs skip them. A release that changes the shader recompiler compiles
+  everything again once.
   A quick-time event can fail during a freeze: **Accessibility Presets → Motor Accessibility**
   turns "Mash ○" prompts into "Hold ○", which survives them.
 - The DEFEND prompts in the Freya fight on the sled need one fresh press of the shown button
   (L1 or R1) each time they appear. Holding the button beforehand or mashing it fails them.
-- Long pointed spikes sometimes stick out of rocks, branches and overhangs in the forest, and a
-  thin streak can cross a clearing. Both persist while the view stays put. The cause is open.
+- A thin yellow streak crossed the deer clearing in the forest dream before the spike fix. It
+  has not been checked since.
 - Small black marks occasionally flash during fast camera turns.
 - The frame rate is 10–40 FPS.
 - After a death, **Restart from Checkpoint** ignores quick taps: wait until the tip screen has
