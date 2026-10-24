@@ -109,13 +109,17 @@ Fenrir starts Ragnarök with `--tessellation`, set in homelab's
 
 Known issues:
 
-- The first run after an emulator update compiles pipelines with freezes of up to about 100 s,
-  and a quick-time event can fail during one. Later runs reuse the pipeline caches.
-- Some particle effects in the opening (snow and sparks) draw as screen-wide streaks.
+- Snow, sparks and other particle effects in the opening often draw as screen-wide streaks
+  through the screen centre. The cause is still open; it is not the dynamic-resolution or
+  write-tracking changes above.
+- The first run after an emulator update compiles pipelines with freezes of up to about 100 s.
+  Later runs reuse the pipeline caches, but shorter compile stalls still happen in new scenes.
+  A quick-time event can fail during a stall: **Accessibility Presets → Motor Accessibility**
+  turns "Mash ○" prompts into "Hold ○", which survives them.
 - The frame rate is 10–40 FPS.
-- After a death, **Restart from Checkpoint** sometimes never finishes: the tip screen stays up
-  while the game renders normally. The cause is still open; some deaths reload after a second
-  Cross press, others not at all.
+- After a death, **Restart from Checkpoint** ignores quick taps: wait until the tip screen has
+  settled and hold Cross for about half a second. Some reloads still stop on the spinning
+  emblem with no file activity. **Continue** from the main menu resumes the autosave.
 
 The merged pull requests change areas upstream is still revising. When upstream merges them, or
 other changes that touch them, the nightly merge may conflict and stop with a notification.
