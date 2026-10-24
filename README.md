@@ -112,7 +112,11 @@ particles spent seconds per draw contending on one fault-bitmap word.
 The last four fix the emulator stopping with `failed to create image` (exit status 65) after 15 to
 35 minutes of play, once device memory ran out. Texture garbage collection had stalled behind the
 render targets, could not evict anything during a scene change, and later thrashed against
-allocator blocks that still held freed space. Device memory now stays around 10 to 12 GB.
+allocator blocks that still held freed space. Device memory now stays around 10 to 12 GB, and the
+published release ran an hour of play without stopping. The fixes also removed most of the black,
+tile-shaped blocks and white blobs: under memory pressure the buffer cache evicted buffers that
+shaders reach through BDA, and their pages read zero until faulted back in (10 faults/s before,
+under 0.5/s after).
 
 `705fadbb` reverts an earlier PS5Plus change, `4c14b72b`, that skipped the ordered-append rank
 wait on 32-lane hosts (NVIDIA). The particle compaction depends on that ordering. Without it,
@@ -124,16 +128,16 @@ Fenrir starts Ragnarök with `--tessellation`, set in homelab's
 Known issues:
 
 - The first time a scene is played, pipelines compile on the render thread at up to about 5 s
-  each, and the game shows no frames meanwhile. In the opening credits sled ride these freezes
-  add up to several minutes. Compiled pipelines are kept in
+  each, and the game shows no frames meanwhile. In the opening credits sled ride and the forest
+  dream these freezes add up to several minutes of single frames. Compiled pipelines are kept in
   `~/.local/share/ps5plus/_PipelineCache` (keyed by GPU and driver), so later runs skip them.
   A quick-time event can fail during a freeze: **Accessibility Presets → Motor Accessibility**
   turns "Mash ○" prompts into "Hold ○", which survives them.
 - The DEFEND prompts in the Freya fight on the sled need one fresh press of the shown button
   (L1 or R1) each time they appear. Holding the button beforehand or mashing it fails them.
-- Black, tile-shaped blocks sometimes cover parts of the image, mostly along object edges after
-  the camera turns or a scene loads, and large white blobs occasionally cover a character. Both
-  clear within a few frames. The cause is open.
+- Long pointed spikes sometimes stick out of rocks, branches and overhangs in the forest, and a
+  thin streak can cross a clearing. Both persist while the view stays put. The cause is open.
+- Small black marks occasionally flash during fast camera turns.
 - The frame rate is 10–40 FPS.
 - After a death, **Restart from Checkpoint** ignores quick taps: wait until the tip screen has
   settled and hold Cross for about half a second. Some reloads still stop on the spinning
