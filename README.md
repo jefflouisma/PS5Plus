@@ -76,9 +76,10 @@ saves. Emulator logs are written to `/Volumes/4TB_Drive/tmp/ps5plus/logs` in the
 ## God of War Ragnarök (PPSA08332)
 
 Upstream KytyPS5 shows a black screen in Ragnarök (KytyPS5 issue #546). `ps5plus` adds the open
-upstream pull requests the game needs and the fixes below. With them it boots, plays the opening
-cutscene, and is controllable through the sled ride, the quick-time events and the first fight on
-g913 (RTX 5080, NVIDIA 615.71), launched from EmuDeck.
+upstream pull requests the game needs and the fixes below. With them it runs from EmuDeck on g913
+(RTX 5080, NVIDIA 615.71) through the opening: the sled ride and its quick-time events, Freya's
+attack, the credits ride, and the on-foot homestead section with Fenrir's shelter, the cabin and
+the forest.
 
 Merged upstream pull requests: #1118, #1152, #1165, #1199, #1200, #1211, #1254, #1255, #1281,
 #1282, #1284, #1285, #1289, #1294, #1295, #1307, #1308, #1311, #1456, #1491, #1503, #1506,
@@ -99,10 +100,19 @@ PS5Plus changes:
 | `1ed88c44` | Shader: a BDA page miss tests its fault bit before setting it, so a missing page no longer serializes a whole draw. |
 | `fcbad5a2` | Texture cache: the garbage collector frees GPU-written images superseded by a newer same-layout sibling, so dynamic-resolution targets no longer fill device memory. |
 | `b8d12f57` | Buffer cache: buffers created for BDA page faults stay resident, so their pages no longer fault again and read zero every few seconds. |
+| `38b5ddee` | Texture cache: garbage collection steps over the render targets it keeps instead of spending its budget on them, so other textures are still evicted. |
+| `9bec8390` | Texture cache: under critical memory pressure, textures the GPU never wrote are evicted after a few idle frames, so a scene change no longer fills device memory before anything is old enough to evict. |
+| `2b0ef0a7` | Texture cache: memory pressure is measured by memory in use, not by allocator blocks that still hold freed space, so collection no longer thrashes. |
+| `3a51507e` | Graphics: device memory is allocated in 64 MiB blocks, which keeps about 1 GB less of it reserved but unused. |
 
-The last two fix the NVIDIA device loss (`Xid 109, CTX SWITCH TIMEOUT` in `kern.log`) in the
-opening cutscene. Its particle draws read past their index buffers, and lit particles spent
-seconds per draw contending on one fault-bitmap word.
+`807e6e76` and `1ed88c44` fix the NVIDIA device loss (`Xid 109, CTX SWITCH TIMEOUT` in
+`kern.log`) in the opening cutscene. Its particle draws read past their index buffers, and lit
+particles spent seconds per draw contending on one fault-bitmap word.
+
+The last four fix the emulator stopping with `failed to create image` (exit status 65) after 15 to
+35 minutes of play, once device memory ran out. Texture garbage collection had stalled behind the
+render targets, could not evict anything during a scene change, and later thrashed against
+allocator blocks that still held freed space. Device memory now stays around 10 to 12 GB.
 
 `705fadbb` reverts an earlier PS5Plus change, `4c14b72b`, that skipped the ordered-append rank
 wait on 32-lane hosts (NVIDIA). The particle compaction depends on that ordering. Without it,
@@ -121,6 +131,9 @@ Known issues:
   turns "Mash ○" prompts into "Hold ○", which survives them.
 - The DEFEND prompts in the Freya fight on the sled need one fresh press of the shown button
   (L1 or R1) each time they appear. Holding the button beforehand or mashing it fails them.
+- Black, tile-shaped blocks sometimes cover parts of the image, mostly along object edges after
+  the camera turns or a scene loads, and large white blobs occasionally cover a character. Both
+  clear within a few frames. The cause is open.
 - The frame rate is 10–40 FPS.
 - After a death, **Restart from Checkpoint** ignores quick taps: wait until the tip screen has
   settled and hold Cross for about half a second. Some reloads still stop on the spinning
