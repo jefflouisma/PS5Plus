@@ -126,7 +126,7 @@ shaders reach through BDA, and their pages read zero until faulted back in (10 f
 under 0.5/s after).
 
 `43b7e105` and `ce27b876` remove the long pointed spikes that stuck out of rocks, branches and
-overhangs in the forest. Some meshes store positions 6 bytes apart and fetch them as 8-byte
+overhangs in the forest, and the thin yellow streak across the deer clearing. Some meshes store positions 6 bytes apart and fetch them as 8-byte
 16_16_16_16 values. The buffer was bound for `NumRecords × Stride` bytes, so the last vertex's
 fetch ran 2 bytes past the binding and read zeros. A zero 16-bit UNORM position becomes -1, and
 the vertex was drawn far away. The hardware bounds such fetches by record.
@@ -152,16 +152,17 @@ Known issues:
 - The first time a scene is played, pipelines compile on the render thread, mostly in under 2 s
   each, and the game shows no frames meanwhile. Before the shader changes above, new areas such as
   the cave on Atreus's tracks froze for 45 to 100 s at a time. The changes roughly halve that.
-  Compiled pipelines are kept in `~/.local/share/ps5plus/_PipelineCache` (keyed by GPU and
-  driver), so later runs skip them. A release that changes the shader recompiler compiles
-  everything again once.
+  On the first run of the `1884696` release, the first camera turn in the forest dream froze for
+  about 45 s. Compiled pipelines are kept in `~/.local/share/ps5plus/_PipelineCache` (keyed by GPU
+  and driver), so later runs skip them: the second launch reached the main menu in under 100 s
+  instead of 4 minutes. A release that changes the shader recompiler compiles everything again
+  once.
   A quick-time event can fail during a freeze: **Accessibility Presets → Motor Accessibility**
   turns "Mash ○" prompts into "Hold ○", which survives them.
 - The DEFEND prompts in the Freya fight on the sled need one fresh press of the shown button
   (L1 or R1) each time they appear. Holding the button beforehand or mashing it fails them.
-- A thin yellow streak crossed the deer clearing in the forest dream before the spike fix. It
-  has not been checked since.
-- Small black marks occasionally flash during fast camera turns.
+- Small black marks used to flash during fast camera turns. None appeared in 20 screenshots taken
+  during fast turns on the `1884696` release, so they are at least rarer now.
 - The frame rate is 10–40 FPS.
 - After a death, **Restart from Checkpoint** ignores quick taps: wait until the tip screen has
   settled and hold Cross for about half a second. Some reloads still stop on the spinning
