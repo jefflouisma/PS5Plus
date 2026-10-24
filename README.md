@@ -83,8 +83,9 @@ g913 (RTX 5080, NVIDIA 615.71), launched from EmuDeck.
 Merged upstream pull requests: #1118, #1152, #1165, #1199, #1200, #1211, #1254, #1255, #1281,
 #1282, #1284, #1285, #1289, #1294, #1295, #1307, #1308, #1311, #1456, #1491, #1503, #1506,
 #1791, #1821 and #1828. The others linked from the issue were already upstream, superseded
-(#1482 by #1791) or unrelated. #1288 conflicts with upstream's GPU indirect-draw path, and
-PS5Plus fixes that path separately.
+(#1482 by #1791) or unrelated. #1288 (draw GPU-written indirect arguments without a readback)
+was closed upstream after upstream implemented it in `c513a4a1`, `949de19b` and `86fed10b`,
+which `ps5plus` has.
 
 PS5Plus changes:
 
@@ -93,7 +94,6 @@ PS5Plus changes:
 | `85f47a33` | PlayGo: a dump without chunk metadata reports every chunk as installed, so the game no longer waits forever for its first frame. |
 | `4b3672ab`, `349f7d19` | Texture cache: keep up to four dynamic-resolution siblings of a render target instead of recreating them every frame. |
 | `651db272` | Shader: allow PC-relative buffer descriptors in programs that use `s_swappc`. |
-| `4c14b72b` | Shader: on 32-lane hosts (NVIDIA) skip the ordered-append rank wait, which stalled the GPU for minutes. |
 | `8166ea03` | Shader: resource tracking follows loop inductions split across congruent Phis. |
 | `807e6e76` | Renderer: index buffers are bound with `INDEX_BUFFER_SIZE` (`VK_KHR_maintenance5`), so indices past it read as 0 as on the hardware. |
 | `1ed88c44` | Shader: a BDA page miss tests its fault bit before setting it, so a missing page no longer serializes a whole draw. |
@@ -104,18 +104,23 @@ The last two fix the NVIDIA device loss (`Xid 109, CTX SWITCH TIMEOUT` in `kern.
 opening cutscene. Its particle draws read past their index buffers, and lit particles spent
 seconds per draw contending on one fault-bitmap word.
 
+`705fadbb` reverts an earlier PS5Plus change, `4c14b72b`, that skipped the ordered-append rank
+wait on 32-lane hosts (NVIDIA). The particle compaction depends on that ordering. Without it,
+snow, sparks and embers drew as screen-wide streaks through the screen centre.
+
 Fenrir starts Ragnarök with `--tessellation`, set in homelab's
 `images/emudeck/config/title-options`.
 
 Known issues:
 
-- Snow, sparks and other particle effects in the opening often draw as screen-wide streaks
-  through the screen centre. The cause is still open; it is not the dynamic-resolution or
-  write-tracking changes above.
-- The first run after an emulator update compiles pipelines with freezes of up to about 100 s.
-  Later runs reuse the pipeline caches, but shorter compile stalls still happen in new scenes.
-  A quick-time event can fail during a stall: **Accessibility Presets → Motor Accessibility**
+- The first time a scene is played, pipelines compile on the render thread at up to about 5 s
+  each, and the game shows no frames meanwhile. In the opening credits sled ride these freezes
+  add up to several minutes. Compiled pipelines are kept in
+  `~/.local/share/ps5plus/_PipelineCache` (keyed by GPU and driver), so later runs skip them.
+  A quick-time event can fail during a freeze: **Accessibility Presets → Motor Accessibility**
   turns "Mash ○" prompts into "Hold ○", which survives them.
+- The DEFEND prompts in the Freya fight on the sled need one fresh press of the shown button
+  (L1 or R1) each time they appear. Holding the button beforehand or mashing it fails them.
 - The frame rate is 10–40 FPS.
 - After a death, **Restart from Checkpoint** ignores quick taps: wait until the tip screen has
   settled and hold Cross for about half a second. Some reloads still stop on the spinning
