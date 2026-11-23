@@ -194,6 +194,15 @@ A 74-minute play-test of the merge found:
 - the first Raider fight cleared with no deaths;
 - the ravine crossed with no exit.
 
+A 45-minute ES-DE play-test of the `b5159af` release found:
+
+- the main menu after 2:50;
+- Continue loaded past the ravine;
+- Raider fights through to the campfire ledge;
+- one death, resumed at the checkpoint;
+- stalls of about 30 s on new scenes;
+- no exit.
+
 Fenrir starts Ragnarök with `--tessellation`, set in homelab's
 `images/emudeck/config/title-options`.
 
@@ -213,7 +222,9 @@ Known issues:
   (L1 or R1) each time they appear. Holding the button beforehand or mashing it fails them.
 - Small black marks used to flash during fast camera turns. None appeared in 20 screenshots taken
   during fast turns on the `1884696` release, or in 30 on the November merge, so they are at
-  least rarer now.
+  least rarer now. On the `b5159af` release, short blue-violet horizontal flecks appeared at the
+  left of a dark wall in a few fast turns. They may be motion-blurred particles or the same
+  artifact on a darker background.
 - The frame rate is 10–40 FPS.
 - After a death, **Restart from Checkpoint** ignores quick taps: wait until the tip screen has
   settled and hold Cross for about half a second. Some reloads still stop on the spinning
