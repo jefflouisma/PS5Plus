@@ -83,15 +83,22 @@ forest dream, then Atreus's tracks through the wolves' den cave to the first fig
 In that fight light and heavy attacks, blocking, rolling, and the axe throw and recall all work, and
 both sides take damage.
 
-Merged upstream pull requests: #1118, #1152, #1165, #1199, #1200, #1211, #1254, #1255, #1281,
-#1282, #1284, #1285, #1289, #1294, #1295, #1307, #1308, #1311, #1456, #1491, #1503, #1506,
-#1791, #1821, #1828, #1866 and #1872. #1866 and #1872 are still open upstream; each is one commit,
-applied as `bd2fa259` and `4eff78c9`. #1115, #1144, #1188, #1256, #1283, #1286, #1288, #1296 and
-#1482 were closed upstream after main implemented them. Their merges record them and keep main's
-code. For example, main implemented #1288 (draw GPU-written indirect arguments without a
-readback) in `c513a4a1`, `949de19b` and `86fed10b`. Its one remaining difference, offsets with no
-SGPR destination, never occurs in Ragnarök's forest. `e8ac3324` cherry-picks main's `706aa030`,
-which extracts 9-bit NGG primitive vertex indices.
+Merged upstream pull requests that are still open upstream: #1118, #1152, #1199, #1200, #1254,
+#1255, #1281, #1282, #1284, #1289, #1294, #1295, #1307, #1491, #1503, #1506, #1791 and #1828.
+#1165 and #1866 were closed upstream, but main has no equivalent, so `ps5plus` keeps their code
+(#1866 is the single commit `bd2fa259`).
+
+For these, `ps5plus` uses main's code instead of the pull request's:
+
+- #1115, #1144, #1188, #1211, #1256, #1283, #1285, #1286, #1288, #1296, #1308, #1311, #1456, #1482
+  and #1821 were closed upstream after main implemented them. For example, main implemented #1288
+  (draw GPU-written indirect arguments without a readback) in `c513a4a1`, `949de19b` and
+  `86fed10b`. Its one remaining difference, offsets with no SGPR destination, never occurs in
+  Ragnarök's forest.
+- #1872 is still open, but main implemented the same AudioOut2 behaviour in `75026cbe` and
+  `bd4c13dc`.
+- Main's `706aa030`, which extracts 9-bit NGG primitive vertex indices, replaces the earlier
+  cherry-pick `e8ac3324`.
 
 PS5Plus changes:
 
@@ -144,6 +151,49 @@ functions would have shrunk the shaders further, but it doubled NVIDIA's compile
 wait on 32-lane hosts (NVIDIA). The particle compaction depends on that ordering. Without it,
 snow, sparks and embers drew as screen-wide streaks through the screen centre.
 
+### Upstream merge of 22 November 2026
+
+From 24 October every nightly merge stopped on conflicts. On 22 November, `fb19bc42` merged 511
+upstream commits, up to `a0b083c8`, by hand. Upstream now:
+
+- emits native PM4 packets;
+- keeps compiled shader modules in a shader store and warms pipelines at boot, which replaces
+  #1311's recorded-recipe cache;
+- walks SRTs with a native JIT.
+
+The merge ports the open pull requests and the PS5Plus changes onto that code. These commits then
+fix what the merge broke:
+
+| Commit | Fix |
+|--------|-----|
+| `ecc02e19` | Linux build: include `<cstring>` for #1165's read fallback. |
+| `a172fe3a` | RELEASE_MEM is checked against its native packet header. Before this fix every game stopped at startup with `Not implemented`. |
+| `151faaed` | #1791: packed tessellation control-point offsets stay static. |
+| `6cebfcb9` | #1282: conditional indirect buffers read labels that are deferred behind GPU timestamps. |
+| `db41bbe8` | #1254: a detached readback decides on a flush from the pages it needs before widening its range. |
+| `cb186b3f` | #1456: the workgroup divisor is applied before probing image keys, as in upstream's `de3ed905`. |
+| `91516a2d` | #1294: ray-tracing BVH mirrors set the fault summary bits. |
+| `0582de5c` | Display-buffer waits match upstream, which reverted the command-processor waits in `1be1c6c4`. |
+
+`036ae00b`, `85a4e605`, `3c05f295`, `acd05219`, `b669058b` and `cabc421f` update tests for
+behaviour upstream changed or for broken fixtures. On g913, every GPU test route passes. The full
+run stops at the same dirty-memory fixture (`BdaPageTableStartsCleared`) as before the merge.
+
+Results with the upstream shader store, on a cold start of a forest save (no pipeline or driver
+cache):
+
+- The main menu appears after 169 s instead of 249 s.
+- Ten minutes after Continue, 1,382 pipelines have compiled (average 161 ms) instead of 1,940
+  (average 204 ms).
+- The frame rate at the same view is unchanged, about 18 FPS.
+
+A 74-minute play-test of the merge found:
+
+- no spikes or deer-clearing streak;
+- no black marks in 30 fast-turn frames;
+- the first Raider fight cleared with no deaths;
+- the ravine crossed with no exit.
+
 Fenrir starts Ragnarök with `--tessellation`, set in homelab's
 `images/emudeck/config/title-options`.
 
@@ -162,7 +212,8 @@ Known issues:
 - The DEFEND prompts in the Freya fight on the sled need one fresh press of the shown button
   (L1 or R1) each time they appear. Holding the button beforehand or mashing it fails them.
 - Small black marks used to flash during fast camera turns. None appeared in 20 screenshots taken
-  during fast turns on the `1884696` release, so they are at least rarer now.
+  during fast turns on the `1884696` release, or in 30 on the November merge, so they are at
+  least rarer now.
 - The frame rate is 10–40 FPS.
 - After a death, **Restart from Checkpoint** ignores quick taps: wait until the tip screen has
   settled and hold Cross for about half a second. Some reloads still stop on the spinning
